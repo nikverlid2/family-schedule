@@ -3,8 +3,10 @@
 
 const CFG = window.FAMILY_APP_CONFIG || {};
 const API = (CFG.supabaseUrl || "").replace(/\/$/,"") + "/rest/v1/rpc/";
-const SESSION_KEY = "family_schedule_shared_session_v2";
-const LAST_TAB_KEY = "family_schedule_last_tab_v2";
+const FUNCTION_API = (CFG.supabaseUrl || "").replace(/\/$/,"") + "/functions/v1/";
+const SESSION_KEY = "family_schedule_shared_session_v3";
+const LAST_TAB_KEY = "family_schedule_last_tab_v3";
+const VAPID_PUBLIC_KEY = "BP92_u9wwGgMF84QEg4xeOutgggTLyOXLlUfsbo8ilPEOC07auVmfpM15Yu7EAT6mXWy1xMvVqWiN9sdZRejNoc";
 
 const profiles = [
   {slug:"mama", name:"Мама"},
@@ -14,7 +16,7 @@ const profiles = [
 ];
 
 let session = loadSession();
-let activeSlug = loadLastTab();
+let activeSlug = queryProfile() || loadLastTab();
 let schedule = [];
 let draft = [];
 let editPin = "";
@@ -27,8 +29,7 @@ function configured(){
 function headers(){
   return {
     "Content-Type":"application/json",
-    "apikey":CFG.anonKey,
-    "Authorization":"Bearer " + CFG.anonKey
+    "apikey":CFG.anonKey
   };
 }
 async function rpc(name, body){
@@ -41,7 +42,10 @@ async function rpc(name, body){
   const txt = await r.text();
   let data = null;
   try{ data = txt ? JSON.parse(txt) : null; }catch(e){ data = txt; }
-  if(!r.ok) throw new Error((data && data.message) || txt || ("HTTP "+r.status));
+  if(!r.ok) {
+    const message = data && typeof data === "object" ? (data.message || data.error || "") : String(txt || "");
+    throw new Error(message || ("HTTP "+r.status));
+  }
   return data;
 }
 function loadSession(){
@@ -58,6 +62,12 @@ function clearSession(){
   session = null;
   try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
 }
+function queryProfile(){
+  try{
+    const s = new URL(location.href).searchParams.get("profile");
+    return profiles.some(p=>p.slug===s) ? s : null;
+  }catch(e){ return null; }
+}
 function loadLastTab(){
   try{
     const s = localStorage.getItem(LAST_TAB_KEY);
@@ -69,6 +79,15 @@ function saveLastTab(slug){
   activeSlug = slug;
   try{ localStorage.setItem(LAST_TAB_KEY, slug); }catch(e){}
 }
+function cleanProfileQuery(){
+  try{
+    const u = new URL(location.href);
+    if(u.searchParams.has("profile")){
+      u.searchParams.delete("profile");
+      history.replaceState(null,"",u.pathname + (u.search ? u.search : "") + u.hash);
+    }
+  }catch(e){}
+}
 function esc(s){
   return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -79,6 +98,9 @@ function mins(t){
 function hhmm(m){
   const h=Math.floor(m/60), mm=m%60;
   return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0");
+}
+function normalizeColor(c){
+  return ["red","orange","blue"].includes(c) ? c : "blue";
 }
 function showLogin(){ document.getElementById("loginOverlay").classList.remove("hidden"); }
 function hideLogin(){ document.getElementById("loginOverlay").classList.add("hidden"); }
@@ -93,10 +115,9 @@ function renderProfileTabs(){
     b.onclick=async()=>{
       if(p.slug===activeSlug) return;
       closeEditor();
-      editPin="";
       saveLastTab(p.slug);
       renderProfileTabs();
-      await refresh();
+      try{ await refresh(); }catch(e){ showConnectionError(); }
     };
     box.appendChild(b);
   });
@@ -106,7 +127,8 @@ function buildTimeline(items){
   const normalized=(items||[]).map(x=>({
     start:mins(x.start_time.slice(0,5)),
     end:mins(x.end_time.slice(0,5)),
-    text:x.title
+    text:x.title,
+    color:normalizeColor(x.color)
   })).sort((a,b)=>a.start-b.start);
 
   const out=[{start:420,end:420,text:"Подъём",type:"marker"}];
@@ -117,7 +139,7 @@ function buildTimeline(items){
     if(e<=s) continue;
     if(s>cur) out.push({start:cur,end:s,text:"Свободное время",type:"free"});
     if(e>cur){
-      out.push({start:Math.max(cur,s),end:e,text:x.text,type:"busy"});
+      out.push({start:Math.max(cur,s),end:e,text:x.text,type:"busy",color:x.color});
       cur=Math.max(cur,e);
     }
   }
@@ -132,7 +154,11 @@ function renderSchedule(){
   box.innerHTML="";
   for(const x of buildTimeline(schedule)){
     const d=document.createElement("div");
-    d.className="slot "+(x.type==="free"?"free":x.type==="marker"?"sleep":"");
+    let cls="slot";
+    if(x.type==="free") cls+=" free";
+    else if(x.type==="marker") cls+=" sleep";
+    else cls+=" busy color-"+normalizeColor(x.color);
+    d.className=cls;
     const time = x.start===x.end ? hhmm(x.start) : hhmm(x.start)+"–"+hhmm(x.end);
     d.innerHTML='<div class="time">'+time+'</div><div class="label">'+esc(x.text)+'</div>';
     box.appendChild(d);
@@ -159,6 +185,11 @@ async function refresh(){
   renderHeader(res.profile_name);
   renderProfileTabs();
   renderSchedule();
+  cleanProfileQuery();
+}
+
+function showConnectionError(){
+  document.getElementById("schedule").innerHTML='<div class="loading">Нет связи с сервером. Попробуйте ещё раз.</div>';
 }
 
 async function doLogin(){
@@ -171,10 +202,12 @@ async function doLogin(){
     saveSession({token:res.session_token});
     document.getElementById("familyPassword").value="";
     await refresh();
+    await syncExistingPushSubscription();
   }catch(e){
+    const m=String(e.message||"").toLowerCase();
     err.textContent=e.message==="BACKEND_NOT_CONFIGURED"
       ? "База ещё не подключена."
-      : "Неверный пароль или нет связи с сервером.";
+      : (m.includes("password") || m.includes("invalid")) ? "Неверный пароль." : "Нет связи с сервером. Попробуйте ещё раз.";
   }
 }
 
@@ -192,14 +225,15 @@ async function openEditor(){
     }
     editPin=pin;
   }catch(e){
-    alert("Не удалось проверить PIN-код.");
+    alert(String(e.message||"").toLowerCase().includes("pin") ? "Неверный PIN-код." : "Нет связи с сервером. Попробуйте ещё раз.");
     return;
   }
 
   draft=schedule.map(x=>({
     start:x.start_time.slice(0,5),
     end:x.end_time.slice(0,5),
-    title:x.title
+    title:x.title,
+    color:normalizeColor(x.color)
   }));
   document.getElementById("viewer").classList.add("off");
   document.getElementById("editor").classList.add("on");
@@ -221,17 +255,30 @@ function renderEditor(){
     box.innerHTML='<div class="help">Пока занятий нет. Нажмите «+ Добавить занятие».</div>';
   }
   draft.forEach((x,i)=>{
+    const color=normalizeColor(x.color);
     const row=document.createElement("div");
     row.className="edit-row";
     row.innerHTML=
       '<input type="time" value="'+esc(x.start)+'" data-i="'+i+'" data-f="start">'+
       '<input type="time" value="'+esc(x.end)+'" data-i="'+i+'" data-f="end">'+
       '<input class="activity" type="text" value="'+esc(x.title)+'" placeholder="Например: школа, работа, тренировка" data-i="'+i+'" data-f="title">'+
-      '<button class="x" data-del="'+i+'">×</button>';
+      '<div class="color-picker" aria-label="Цвет занятия">'+
+        '<button type="button" class="swatch red '+(color==="red"?"selected":"")+'" data-color="red" data-i="'+i+'" aria-label="Красный"></button>'+
+        '<button type="button" class="swatch orange '+(color==="orange"?"selected":"")+'" data-color="orange" data-i="'+i+'" aria-label="Оранжевый"></button>'+
+        '<button type="button" class="swatch blue '+(color==="blue"?"selected":"")+'" data-color="blue" data-i="'+i+'" aria-label="Синий"></button>'+
+      '</div>'+
+      '<button class="x" data-del="'+i+'" aria-label="Удалить">×</button>';
     box.appendChild(row);
   });
+
   box.querySelectorAll("input").forEach(inp=>{
     inp.oninput=()=>{ draft[Number(inp.dataset.i)][inp.dataset.f]=inp.value; };
+  });
+  box.querySelectorAll("[data-color]").forEach(btn=>{
+    btn.onclick=()=>{
+      draft[Number(btn.dataset.i)].color=btn.dataset.color;
+      renderEditor();
+    };
   });
   box.querySelectorAll("[data-del]").forEach(btn=>{
     btn.onclick=()=>{ draft.splice(Number(btn.dataset.del),1); renderEditor(); };
@@ -243,6 +290,7 @@ function validateDraft(){
     if(!x.start || !x.end || !x.title.trim()) return "Заполните начало, конец и название каждого занятия.";
     if(mins(x.start)<420 || mins(x.end)>1320) return "Занятия можно ставить только с 07:00 до 22:00.";
     if(mins(x.end)<=mins(x.start)) return "Окончание должно быть позже начала.";
+    if(!["red","orange","blue"].includes(normalizeColor(x.color))) return "Выберите цвет занятия.";
   }
   const sorted=[...draft].sort((a,b)=>mins(a.start)-mins(b.start));
   for(let i=1;i<sorted.length;i++){
@@ -255,26 +303,125 @@ function validateDraft(){
 async function saveDraft(){
   const msg=validateDraft();
   if(msg){ alert(msg); return; }
+  const profileChanged = activeSlug;
   try{
     await rpc("replace_family_schedule",{
       p_session_token:session.token,
       p_profile_slug:activeSlug,
       p_edit_pin:editPin,
-      p_items:draft.map(x=>({start_time:x.start,end_time:x.end,title:x.title.trim()}))
+      p_items:draft.map(x=>({
+        start_time:x.start,
+        end_time:x.end,
+        title:x.title.trim(),
+        color:normalizeColor(x.color)
+      }))
     });
     closeEditor();
     await refresh();
+    notifyScheduleChange(profileChanged);
   }catch(e){
-    alert("Не удалось сохранить изменения. Проверьте интернет и попробуйте ещё раз.");
+    alert("Не удалось сохранить изменения.");
   }
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding="=".repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+
+async function getServiceWorkerRegistration(){
+  if(!("serviceWorker" in navigator)) throw new Error("PUSH_UNSUPPORTED");
+  return navigator.serviceWorker.register("./service-worker.js?v=3", {scope:"./"});
+}
+
+async function registerSubscriptionWithBackend(subscription){
+  const json=subscription.toJSON();
+  if(!json.endpoint || !json.keys || !json.keys.p256dh || !json.keys.auth) throw new Error("BAD_SUBSCRIPTION");
+  await rpc("register_family_push",{
+    p_session_token:session.token,
+    p_endpoint:json.endpoint,
+    p_p256dh:json.keys.p256dh,
+    p_auth:json.keys.auth,
+    p_user_agent:navigator.userAgent
+  });
+}
+
+async function enableNotifications(){
+  if(!session || !session.token){
+    alert("Сначала войдите в семейное расписание.");
+    return;
+  }
+  if(!("Notification" in window) || !("PushManager" in window) || !("serviceWorker" in navigator)){
+    alert("На iPhone сначала добавьте сайт на экран «Домой» и откройте его оттуда.");
+    return;
+  }
+  try{
+    const permission=await Notification.requestPermission();
+    if(permission!=="granted"){
+      alert("Уведомления не разрешены.");
+      return;
+    }
+    const reg=await getServiceWorkerRegistration();
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      sub=await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    await registerSubscriptionWithBackend(sub);
+    updateNotifyButton(true);
+    alert("Уведомления включены.");
+  }catch(e){
+    alert("Не удалось включить уведомления. На iPhone откройте сайт именно с экрана «Домой» и попробуйте ещё раз.");
+  }
+}
+
+async function syncExistingPushSubscription(){
+  try{
+    if(Notification.permission!=="granted" || !session || !session.token) return;
+    const reg=await getServiceWorkerRegistration();
+    const sub=await reg.pushManager.getSubscription();
+    if(sub){
+      await registerSubscriptionWithBackend(sub);
+      updateNotifyButton(true);
+    }
+  }catch(e){}
+}
+
+function updateNotifyButton(enabled){
+  const b=document.getElementById("notifyBtn");
+  if(!b) return;
+  b.textContent=enabled ? "Уведомления ✓" : "Уведомления";
+  b.classList.toggle("enabled",!!enabled);
+}
+
+async function notifyScheduleChange(profileSlug){
+  try{
+    if(!configured()) return;
+    await fetch(FUNCTION_API+"notify-family-schedule",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "apikey":CFG.anonKey
+      },
+      body:JSON.stringify({
+        session_token:session.token,
+        profile_slug:profileSlug
+      })
+    });
+  }catch(e){}
 }
 
 document.getElementById("loginBtn").onclick=doLogin;
 document.getElementById("familyPassword").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 document.getElementById("editBtn").onclick=openEditor;
+document.getElementById("notifyBtn").onclick=enableNotifications;
 document.getElementById("cancelBtn").onclick=closeEditor;
 document.getElementById("addBtn").onclick=()=>{
-  draft.push({start:"07:00",end:"08:00",title:""});
+  draft.push({start:"07:00",end:"08:00",title:"",color:"blue"});
   renderEditor();
 };
 document.getElementById("saveBtn").onclick=saveDraft;
@@ -284,8 +431,15 @@ document.getElementById("logoutBtn").onclick=()=>{
 
 (async function init(){
   renderProfileTabs();
+  try{ await getServiceWorkerRegistration(); }catch(e){}
   if(session && session.token){
-    try{ await refresh(); return; }catch(e){ clearSession(); }
+    try{
+      await refresh();
+      await syncExistingPushSubscription();
+      return;
+    }catch(e){
+      clearSession();
+    }
   }
   showLogin();
 })();

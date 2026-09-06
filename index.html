@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Расписание">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=3">
   <title>Семейное расписание</title>
 </head>
 <body>
@@ -31,7 +31,10 @@
       <h1>Семейное расписание</h1>
       <div class="muted">Мама · Папа · Никита · Влада</div>
     </div>
-    <button id="editBtn" class="primary">Правка</button>
+    <div class="top-actions">
+      <button id="notifyBtn" class="ghost notify-btn">Уведомления</button>
+      <button id="editBtn" class="primary">Правка</button>
+    </div>
   </header>
 
   <nav id="profiles" class="profiles"></nav>
@@ -56,12 +59,15 @@
         <button id="saveBtn" class="primary">Сохранить</button>
         <button id="cancelBtn" class="ghost">Отмена</button>
       </div>
-      <p class="help">Для правки нужен PIN-код. Занятия можно ставить с 07:00 до 22:00. Пустые интервалы автоматически показываются как «Свободное время».</p>
+      <p class="help">
+        Для правки нужен PIN 1234. У каждого занятия можно выбрать красный, оранжевый или синий цвет.
+        «Свободное время» остаётся зелёным, «Подъём» и «Спать» — фиолетовыми.
+      </p>
     </div>
   </section>
 </main>
 
-<script src="./config.js"></script>
-<script src="./app.js"></script>
+<script src="./config.js?v=3"></script>
+<script src="./app.js?v=3"></script>
 </body>
 </html>
