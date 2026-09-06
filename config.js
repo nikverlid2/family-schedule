@@ -1,5 +1,4 @@
-// Заполняется после создания проекта Supabase.
 window.FAMILY_APP_CONFIG = {
-  supabaseUrl: "PASTE_SUPABASE_URL_HERE",
-  anonKey: "PASTE_SUPABASE_ANON_KEY_HERE"
+  supabaseUrl: "https://oamxmvetxdkkfrtimwgs.supabase.co",
+  anonKey: "sb_publishable_gyQGD4MpuZi3c4zvliqkfg_f1_MP7LL"
 };
