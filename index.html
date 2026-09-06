@@ -15,11 +15,10 @@
 <div id="loginOverlay" class="overlay">
   <section class="login-card">
     <h1>Семейное расписание</h1>
-    <p>Выберите профиль и войдите один раз. На этом устройстве вход сохранится.</p>
-    <div id="loginProfiles" class="login-profiles"></div>
+    <p>Один общий вход для всей семьи. После входа можно смотреть расписание каждого.</p>
     <label class="field">
       <span>Пароль</span>
-      <input id="pinInput" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="1234">
+      <input id="familyPassword" type="password" autocomplete="current-password" placeholder="Введите общий пароль">
     </label>
     <button id="loginBtn" class="primary wide">Войти</button>
     <div id="loginError" class="error"></div>
@@ -30,7 +29,7 @@
   <header class="topbar">
     <div>
       <h1>Семейное расписание</h1>
-      <div class="muted">Мама · Папа · Влада · Никита</div>
+      <div class="muted">Мама · Папа · Никита · Влада</div>
     </div>
     <button id="editBtn" class="primary">Правка</button>
   </header>
@@ -57,11 +56,7 @@
         <button id="saveBtn" class="primary">Сохранить</button>
         <button id="cancelBtn" class="ghost">Отмена</button>
       </div>
-      <p class="help">
-        Занятия можно ставить только с 07:00 до 22:00.
-        Всё остальное время между занятиями автоматически отображается как «Свободное время».
-        С 22:00 до 07:00 — «Сон».
-      </p>
+      <p class="help">Для правки нужен PIN-код. Занятия можно ставить с 07:00 до 22:00. Пустые интервалы автоматически показываются как «Свободное время».</p>
     </div>
   </section>
 </main>

@@ -1,24 +1,23 @@
-
 (function(){
 "use strict";
 
 const CFG = window.FAMILY_APP_CONFIG || {};
 const API = (CFG.supabaseUrl || "").replace(/\/$/,"") + "/rest/v1/rpc/";
-const SESSION_KEY = "family_schedule_session_v1";
-const LAST_PROFILE_KEY = "family_schedule_last_profile_v1";
+const SESSION_KEY = "family_schedule_shared_session_v2";
+const LAST_TAB_KEY = "family_schedule_last_tab_v2";
 
 const profiles = [
   {slug:"mama", name:"Мама"},
   {slug:"papa", name:"Папа"},
-  {slug:"vlada", name:"Влада"},
-  {slug:"nikita", name:"Никита"}
+  {slug:"nikita", name:"Никита"},
+  {slug:"vlada", name:"Влада"}
 ];
 
-let selectedSlug = profiles[0].slug;
 let session = loadSession();
-let activeProfile = null;
+let activeSlug = loadLastTab();
 let schedule = [];
 let draft = [];
+let editPin = "";
 
 function configured(){
   return CFG.supabaseUrl && CFG.anonKey &&
@@ -47,20 +46,28 @@ async function rpc(name, body){
 }
 function loadSession(){
   try{
-    const raw=localStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   }catch(e){ return null; }
 }
 function saveSession(s){
-  session=s;
-  try{
-    localStorage.setItem(SESSION_KEY,JSON.stringify(s));
-    localStorage.setItem(LAST_PROFILE_KEY,s.profile_slug);
-  }catch(e){}
+  session = s;
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }catch(e){}
 }
 function clearSession(){
-  session=null;
+  session = null;
   try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+}
+function loadLastTab(){
+  try{
+    const s = localStorage.getItem(LAST_TAB_KEY);
+    if(profiles.some(p=>p.slug===s)) return s;
+  }catch(e){}
+  return "mama";
+}
+function saveLastTab(slug){
+  activeSlug = slug;
+  try{ localStorage.setItem(LAST_TAB_KEY, slug); }catch(e){}
 }
 function esc(s){
   return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -73,40 +80,28 @@ function hhmm(m){
   const h=Math.floor(m/60), mm=m%60;
   return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0");
 }
-function showLogin(){
-  document.getElementById("loginOverlay").classList.remove("hidden");
-  renderLoginProfiles();
-}
+function showLogin(){ document.getElementById("loginOverlay").classList.remove("hidden"); }
 function hideLogin(){ document.getElementById("loginOverlay").classList.add("hidden"); }
 
-function renderLoginProfiles(){
-  const box=document.getElementById("loginProfiles");
-  box.innerHTML="";
-  profiles.forEach(p=>{
-    const b=document.createElement("button");
-    b.className="login-profile"+(p.slug===selectedSlug?" selected":"");
-    b.textContent=p.name;
-    b.onclick=()=>{ selectedSlug=p.slug; renderLoginProfiles(); document.getElementById("pinInput").focus(); };
-    box.appendChild(b);
-  });
-}
 function renderProfileTabs(){
   const box=document.getElementById("profiles");
   box.innerHTML="";
   profiles.forEach((p,i)=>{
     const b=document.createElement("button");
-    b.className="profile-btn"+(activeProfile && p.slug===activeProfile.slug?" active":"");
+    b.className="profile-btn"+(p.slug===activeSlug?" active":"");
     b.innerHTML='<div class="avatar">'+(i+1)+'</div><div class="profile-name">'+esc(p.name)+'</div>';
     b.onclick=async()=>{
-      if(activeProfile && p.slug===activeProfile.slug) return;
-      clearSession();
-      selectedSlug=p.slug;
-      activeProfile=null;
-      showLogin();
+      if(p.slug===activeSlug) return;
+      closeEditor();
+      editPin="";
+      saveLastTab(p.slug);
+      renderProfileTabs();
+      await refresh();
     };
     box.appendChild(b);
   });
 }
+
 function buildTimeline(items){
   const normalized=(items||[]).map(x=>({
     start:mins(x.start_time.slice(0,5)),
@@ -114,8 +109,9 @@ function buildTimeline(items){
     text:x.title
   })).sort((a,b)=>a.start-b.start);
 
-  const out=[{start:0,end:420,text:"Сон",type:"sleep"}];
+  const out=[{start:420,end:420,text:"Подъём",type:"marker"}];
   let cur=420;
+
   for(const x of normalized){
     const s=Math.max(420,x.start), e=Math.min(1320,x.end);
     if(e<=s) continue;
@@ -125,50 +121,55 @@ function buildTimeline(items){
       cur=Math.max(cur,e);
     }
   }
+
   if(cur<1320) out.push({start:cur,end:1320,text:"Свободное время",type:"free"});
-  out.push({start:1320,end:1440,text:"Сон",type:"sleep"});
+  out.push({start:1320,end:1320,text:"Спать",type:"marker"});
   return out;
 }
+
 function renderSchedule(){
   const box=document.getElementById("schedule");
   box.innerHTML="";
   for(const x of buildTimeline(schedule)){
     const d=document.createElement("div");
-    d.className="slot "+(x.type==="free"?"free":x.type==="sleep"?"sleep":"");
-    d.innerHTML='<div class="time">'+hhmm(x.start)+"–"+hhmm(x.end)+'</div><div class="label">'+esc(x.text)+'</div>';
+    d.className="slot "+(x.type==="free"?"free":x.type==="marker"?"sleep":"");
+    const time = x.start===x.end ? hhmm(x.start) : hhmm(x.start)+"–"+hhmm(x.end);
+    d.innerHTML='<div class="time">'+time+'</div><div class="label">'+esc(x.text)+'</div>';
     box.appendChild(d);
   }
 }
-function renderHeader(){
-  document.getElementById("profileTitle").textContent=activeProfile ? activeProfile.name : "";
+
+function renderHeader(profileName){
+  document.getElementById("profileTitle").textContent=profileName || "";
   try{
     document.getElementById("dateText").textContent=
       new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(new Date());
   }catch(e){}
 }
+
 async function refresh(){
+  if(!session || !session.token) throw new Error("NO_SESSION");
   document.getElementById("schedule").innerHTML='<div class="loading">Загрузка…</div>';
-  const res=await rpc("get_schedule",{p_session_token:session.token});
-  activeProfile={slug:res.profile_slug,name:res.profile_name};
+  const res=await rpc("get_family_schedule",{
+    p_session_token:session.token,
+    p_profile_slug:activeSlug
+  });
   schedule=Array.isArray(res.items)?res.items:[];
   hideLogin();
-  renderHeader();
+  renderHeader(res.profile_name);
   renderProfileTabs();
   renderSchedule();
 }
+
 async function doLogin(){
-  const pin=document.getElementById("pinInput").value.trim();
+  const password=document.getElementById("familyPassword").value;
   const err=document.getElementById("loginError");
   err.textContent="";
-  if(!/^\d{4}$/.test(pin)){ err.textContent="Введите 4 цифры."; return; }
+  if(!password){ err.textContent="Введите пароль."; return; }
   try{
-    const res=await rpc("login_profile",{p_profile_slug:selectedSlug,p_pin:pin});
-    saveSession({
-      token:res.session_token,
-      profile_slug:res.profile_slug,
-      profile_name:res.profile_name
-    });
-    document.getElementById("pinInput").value="";
+    const res=await rpc("login_family",{p_password:password});
+    saveSession({token:res.session_token});
+    document.getElementById("familyPassword").value="";
     await refresh();
   }catch(e){
     err.textContent=e.message==="BACKEND_NOT_CONFIGURED"
@@ -177,18 +178,42 @@ async function doLogin(){
   }
 }
 
-function openEditor(){
-  draft=schedule.map(x=>({start:x.start_time.slice(0,5),end:x.end_time.slice(0,5),title:x.title}));
+async function openEditor(){
+  const pin = window.prompt("Введите PIN-код для правки:");
+  if(pin===null) return;
+  try{
+    const ok=await rpc("verify_family_edit_pin",{
+      p_session_token:session.token,
+      p_edit_pin:pin
+    });
+    if(ok!==true){
+      alert("Неверный PIN-код.");
+      return;
+    }
+    editPin=pin;
+  }catch(e){
+    alert("Не удалось проверить PIN-код.");
+    return;
+  }
+
+  draft=schedule.map(x=>({
+    start:x.start_time.slice(0,5),
+    end:x.end_time.slice(0,5),
+    title:x.title
+  }));
   document.getElementById("viewer").classList.add("off");
   document.getElementById("editor").classList.add("on");
   document.getElementById("editBtn").style.display="none";
   renderEditor();
 }
+
 function closeEditor(){
   document.getElementById("viewer").classList.remove("off");
   document.getElementById("editor").classList.remove("on");
   document.getElementById("editBtn").style.display="";
+  editPin="";
 }
+
 function renderEditor(){
   const box=document.getElementById("editRows");
   box.innerHTML="";
@@ -212,6 +237,7 @@ function renderEditor(){
     btn.onclick=()=>{ draft.splice(Number(btn.dataset.del),1); renderEditor(); };
   });
 }
+
 function validateDraft(){
   for(const x of draft){
     if(!x.start || !x.end || !x.title.trim()) return "Заполните начало, конец и название каждого занятия.";
@@ -225,12 +251,15 @@ function validateDraft(){
   draft=sorted;
   return null;
 }
+
 async function saveDraft(){
   const msg=validateDraft();
   if(msg){ alert(msg); return; }
   try{
-    await rpc("replace_schedule",{
+    await rpc("replace_family_schedule",{
       p_session_token:session.token,
+      p_profile_slug:activeSlug,
+      p_edit_pin:editPin,
       p_items:draft.map(x=>({start_time:x.start,end_time:x.end,title:x.title.trim()}))
     });
     closeEditor();
@@ -241,7 +270,7 @@ async function saveDraft(){
 }
 
 document.getElementById("loginBtn").onclick=doLogin;
-document.getElementById("pinInput").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+document.getElementById("familyPassword").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 document.getElementById("editBtn").onclick=openEditor;
 document.getElementById("cancelBtn").onclick=closeEditor;
 document.getElementById("addBtn").onclick=()=>{
@@ -250,17 +279,11 @@ document.getElementById("addBtn").onclick=()=>{
 };
 document.getElementById("saveBtn").onclick=saveDraft;
 document.getElementById("logoutBtn").onclick=()=>{
-  clearSession(); activeProfile=null; schedule=[]; closeEditor(); showLogin();
+  clearSession(); schedule=[]; closeEditor(); showLogin();
 };
 
 (async function init(){
-  try{
-    const last=localStorage.getItem(LAST_PROFILE_KEY);
-    if(last && profiles.some(p=>p.slug===last)) selectedSlug=last;
-  }catch(e){}
-  renderLoginProfiles();
   renderProfileTabs();
-
   if(session && session.token){
     try{ await refresh(); return; }catch(e){ clearSession(); }
   }
