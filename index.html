@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Расписание">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=3">
+  <link rel="stylesheet" href="./styles.css?v=4">
   <title>Семейное расписание</title>
 </head>
 <body>
@@ -38,6 +38,7 @@
   </header>
 
   <nav id="profiles" class="profiles"></nav>
+  <nav id="weekdays" class="weekdays"></nav>
 
   <section class="card">
     <div class="card-head">
@@ -60,14 +61,15 @@
         <button id="cancelBtn" class="ghost">Отмена</button>
       </div>
       <p class="help">
-        Для правки нужен PIN 1234. У каждого занятия можно выбрать красный, оранжевый или синий цвет.
+        Для правки нужен PIN 1234. Выберите день недели. Обычное занятие повторяется каждую неделю.
+        Если отметить «Временно», можно указать от 1 до 12 повторов.
         «Свободное время» остаётся зелёным, «Подъём» и «Спать» — фиолетовыми.
       </p>
     </div>
   </section>
 </main>
 
-<script src="./config.js?v=3"></script>
-<script src="./app.js?v=3"></script>
+<script src="./config.js?v=4"></script>
+<script src="./app.js?v=4"></script>
 </body>
 </html>
