@@ -8,8 +8,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Расписание">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=6">
   <title>Семейное расписание</title>
+  <link rel="stylesheet" href="./tasks.css?v=6">
 </head>
 <body>
 <div id="loginOverlay" class="overlay">
@@ -37,6 +38,11 @@
     </div>
   </header>
 
+  <nav class="page-tabs" aria-label="Разделы планера" role="tablist">
+    <button id="scheduleTab" role="tab" aria-selected="true" aria-controls="scheduleView">Расписание</button>
+    <button id="tasksTab" role="tab" aria-selected="false" aria-controls="tasksView">Задания</button>
+  </nav>
+  <div id="scheduleView" role="tabpanel" aria-labelledby="scheduleTab">
   <nav id="profiles" class="profiles"></nav>
   <nav id="weekdays" class="weekdays"></nav>
 
@@ -67,9 +73,21 @@
       </p>
     </div>
   </section>
+  </div>
+  <section id="tasksView" role="tabpanel" aria-labelledby="tasksTab" hidden>
+    <div class="tasks-head"><div><h2>Задания</h2><p>Маленькие дела — большой вклад каждого</p></div><button id="taskNew" class="primary">+ Новое задание</button></div>
+    <div class="task-options"><label><input id="taskShowMarkers" type="checkbox" checked> Отметки на плане</label><label><input id="taskShowDone" type="checkbox"> Выполненные</label><button id="taskRefresh" class="ghost">Обновить</button></div>
+    <div id="taskStatus" class="task-status" role="status" aria-live="polite"></div>
+    <div id="taskCards"></div>
+    <section class="task-score-panel" aria-label="Баллы семьи"><div class="task-score-head"><h3>Баллы семьи</h3><select id="taskScorePeriod" aria-label="Период баллов"><option value="all">За всё время</option><option value="week">За неделю</option></select></div><div id="taskScores" class="task-scores"></div></section>
+    <button id="tasksLogout" class="link-btn">Выйти</button>
+  </section>
 </main>
+<dialog id="taskDialog" class="task-dialog" aria-label="Задание или чертёж"><button id="taskDialogClose" class="task-dialog-close" aria-label="Закрыть">×</button><div id="taskDialogContent"></div><p id="taskDialogError" class="task-error" role="alert"></p></dialog>
 
 <script src="./config.js?v=4"></script>
-<script src="./app.js?v=4"></script>
+<script src="./app.js?v=6"></script>
+<script src="./tasks.js?v=6"></script>
 </body>
 </html>
+
