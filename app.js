@@ -61,6 +61,7 @@ async function load(keepEditor=false){
   $("profileTitle").textContent=r.profile_name+" · "+D[d-1];
   $("dateText").textContent=d==td()?"Сегодня":"Еженедельное расписание";
   $("loginOverlay").classList.add("hidden");
+  window.dispatchEvent(new Event("family-login"));
   view();
 
   if(keepEditor&&pin){
@@ -203,7 +204,8 @@ $("editBtn").onclick=edit;
 $("cancelBtn").onclick=close;
 $("saveBtn").onclick=save;
 $("addBtn").onclick=()=>{q.push({start:"07:00",end:"08:00",title:"",color:"blue",temp:false,repeats:1});markDirty();red()};
-$("logoutBtn").onclick=()=>{localStorage.removeItem(S);s=null;close();$("loginOverlay").classList.remove("hidden")};
+$("logoutBtn").onclick=()=>{localStorage.removeItem(S);s=null;close();window.dispatchEvent(new Event("family-logout"));$("loginOverlay").classList.remove("hidden")};
+$("tasksLogout").onclick=()=>$("logoutBtn").click();
 $("notifyBtn").onclick=async()=>{
   try{
     const r=await navigator.serviceWorker.register("./service-worker.js?v=4");
@@ -219,6 +221,17 @@ $("notifyBtn").onclick=async()=>{
   }
 };
 
+function pageTab(tasks){
+  document.querySelector('.shell').classList.toggle('tasks-mode',tasks);
+  $('scheduleView').hidden=tasks;
+  $('tasksView').hidden=!tasks;
+  $('scheduleTab').setAttribute('aria-selected',String(!tasks));
+  $('tasksTab').setAttribute('aria-selected',String(tasks));
+  if(tasks)window.dispatchEvent(new Event('family-tasks-open'));
+}
+$('scheduleTab').onclick=()=>pageTab(false);
+$('tasksTab').onclick=()=>pageTab(true);
+window.addEventListener('family-logout',()=>pageTab(false));
 tabs();
 if(s?.token) load(false).catch(()=>{$("loginOverlay").classList.remove("hidden")});
 })();
