@@ -69,7 +69,7 @@
    return `<section class="task-property" aria-label="${title}">
     <header><div><h3><span class="task-home" aria-hidden="true">⌂</span> ${title}</h3><p>${plans[key][1]} · Открытых заданий: ${pending}</p></div>
     <div class="task-switch" aria-label="План ${title}">${keys.map(k=>`<button data-plan-select="${k}" data-group="${id}" aria-pressed="${k===key}">${plans[k][1]}</button>`).join('')}</div></header>
-    <div class="task-property-body"><div><div class="task-plan" data-plan="${key}">${mapMarkup(key)}</div><div class="task-map-tools"><span>Исходный чертёж</span><button class="link-btn" data-zoom="${key}">Увеличить ↗</button></div></div>
+    <div class="task-property-body"><div><div class="task-plan" data-plan="${key}">${mapMarkup(key)}</div><div class="task-map-tools"><span>План комнат</span><button class="link-btn" data-zoom="${key}">Увеличить ↗</button></div></div>
     <aside><div class="task-list-head"><h4>Список заданий</h4><button class="link-btn" data-add="${key}" aria-label="Добавить задание: ${title}, ${plans[key][1]}">+ Добавить</button></div>
     <div class="task-list">${list.length?list.map(t=>`<button class="task-row ${t.completed_at?'task-done':''}" data-task="${t.id}">
     <span class="task-check" aria-hidden="true">${t.completed_at?'✓':''}</span><span><strong>${esc(t.title)}</strong><small>${esc(t.room||plans[key][1])}${t.completed_at?' · '+esc(people.find(p=>p[0]===t.completed_by)?.[1]):''}</small></span><span class="task-points">+${t.points}</span></button>`).join(''):
