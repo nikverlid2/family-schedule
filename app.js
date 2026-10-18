@@ -40,7 +40,7 @@ function tabs(){
     p=x.dataset.p;
     localStorage.setItem("fsp",p);
     tabs();
-    await load(editing);
+    try{await load(editing)}catch(err){showLoadError(err)}
   });
 
   $("weekdays").innerHTML=D.map((x,i)=>`<button class="day-btn ${i+1==d?"active":""} ${i+1==td()?"today":""}" data-d="${i+1}">${x}</button>`).join("");
@@ -50,7 +50,7 @@ function tabs(){
     d=+x.dataset.d;
     localStorage.setItem("fsd",d);
     tabs();
-    await load(editing);
+    try{await load(editing)}catch(err){showLoadError(err)}
   });
 }
 function iSameDay(btn){ return +btn.dataset.d===d; }
@@ -93,15 +93,29 @@ function view(){
 }
 
 async function login(){
+  $("loginBtn").disabled=true;
   try{
     const r=await rpc("login_family",{p_password:$("familyPassword").value});
+    if(!r?.session_token) throw Error("Сервер не вернул сеанс");
     s={token:r.session_token};
     localStorage.setItem(S,JSON.stringify(s));
     $("loginError").textContent="";
-    await load(false);
-  }catch{
-    $("loginError").textContent="Неверный пароль или нет связи.";
+    $("loginOverlay").classList.add("hidden");
+    window.dispatchEvent(new Event("family-login"));
+  }catch(err){
+    $("loginError").textContent="Ошибка входа: "+(err?.message||"нет связи с сервером");
+    return;
+  }finally{
+    $("loginBtn").disabled=false;
   }
+  try{await load(false)}catch(err){showLoadError(err)}
+}
+function showLoadError(err){
+  $("loginOverlay").classList.add("hidden");
+  $("profileTitle").textContent="Не удалось загрузить расписание";
+  $("dateText").textContent=err?.message||"Ошибка сервера";
+  $("schedule").innerHTML='<div class="slot free">Вход выполнен. Попробуйте переключить день или обновить страницу.</div>';
+  window.dispatchEvent(new Event("family-login"));
 }
 
 async function edit(){
@@ -233,5 +247,5 @@ $('scheduleTab').onclick=()=>pageTab(false);
 $('tasksTab').onclick=()=>pageTab(true);
 window.addEventListener('family-logout',()=>pageTab(false));
 tabs();
-if(s?.token) load(false).catch(()=>{$("loginOverlay").classList.remove("hidden")});
+if(s?.token) load(false).catch(showLoadError);
 })();
